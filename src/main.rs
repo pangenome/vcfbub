@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 //use std::String;
 //use fnv::{FnvHashMap, FnvHashSet};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use vcf::*;
 
 fn get_header(infile: &str) -> vcf::VCFHeader {
@@ -58,6 +58,7 @@ fn get_parent_snarl(vcf_record: &VCFRecord) -> String {
     }
 }
 
+/*
 fn get_bubble_length(vcf_record: &VCFRecord) -> usize {
     let mut alt_lengths = Vec::new();
     alt_lengths.push(vcf_record.reference.len());
@@ -68,6 +69,7 @@ fn get_bubble_length(vcf_record: &VCFRecord) -> usize {
     let smallest = alt_lengths.iter().min().unwrap();
     biggest - smallest
 }
+*/
 
 fn get_max_allele_length(vcf_record: &VCFRecord) -> usize {
     let mut alt_lengths = Vec::new();
@@ -130,17 +132,22 @@ fn main() {
     // make a pass to check the levels
     // and decide what to filter
     // recording things by index in the file
-    let mut parent_bubble: HashMap<String, String> = HashMap::new();
+    let mut keep_record: Vec<bool> = Vec::new();
     let mut popped_bubbles: HashSet<String> = HashSet::new();
-    for_each_line_in_vcf(infile, |vcf_record, idx| {
+    for_each_line_in_vcf(infile, |vcf_record, _| {
         let level = get_level(vcf_record);
         let max_allele_length = get_max_allele_length(vcf_record);
-        if level > max_level || max_allele_length > max_length {
+        if level > max_level {
+            keep_record.push(false);
+        } else {
+            keep_record.push(true);
+        }
+        if max_allele_length > max_length {
             popped_bubbles.insert(get_snarl_id(vcf_record));
         }
-        let snarl_id = get_snarl_id(vcf_record);
-        let parent_snarl = get_parent_snarl(vcf_record);
-        parent_bubble.insert(snarl_id, parent_snarl);
+        //let snarl_id = get_snarl_id(vcf_record);
+        //let parent_snarl = get_parent_snarl(vcf_record);
+        //parent_bubble.insert(snarl_id, parent_snarl);
     });
 
     // setup writer
@@ -149,7 +156,10 @@ fn main() {
     let mut writer = VCFWriter::new(buf, &vcf_header).unwrap();
     for_each_line_in_vcf(infile, |vcf_record, idx| {
         let snarl_id = get_snarl_id(vcf_record);
-        if !popped_bubbles.contains(&snarl_id) {
+        let parent_snarl = get_parent_snarl(vcf_record);
+        if keep_record[idx] && !popped_bubbles.contains(&snarl_id)
+            || !keep_record[idx] && popped_bubbles.contains(&parent_snarl)
+        {
             writer.write_record(&vcf_record).unwrap()
         }
     });
