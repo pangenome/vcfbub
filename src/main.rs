@@ -5,7 +5,7 @@ use vcf::*;
 use clap::{App, Arg};
 
 fn main() {
-    let matches = App::new("vcflevel")
+    let matches = App::new("vcfbub")
         .version("0.1")
         .author("Erik Garrison <erik.garrison@gmail.com>")
         .about("Filter vg deconstruct output using snarl tree annotations.")
