@@ -6,7 +6,7 @@ popping bubbles in vg deconstruct VCFs
 
 The VCF output produced by a command like `vg deconstruct -e -a -H '#' ...` includes information about the nesting of variants.
 With `-a, --all-snarls`, we obtain not just the top level bubbles, but all nested ones.
-This exposed snarl tree information can be used to filter the VCF to obtain a set of non-overlapping sites (n.b.b "snarl" is a generic model of graph bubbles including tips and loops).
+This exposed snarl tree information can be used to filter the VCF to obtain a set of non-overlapping sites (n.b. "snarl" is a generic model of graph bubbles including tips and loops).
 
 `vcfbub` lets us do two common operations on these VCFs.
 
