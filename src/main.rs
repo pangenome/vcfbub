@@ -82,7 +82,7 @@ fn get_max_allele_length(vcf_record: &VCFRecord) -> usize {
 
 fn main() {
     let matches = App::new("vcfbub")
-        .version("0.1")
+        .version("0.1.0")
         .author("Erik Garrison <erik.garrison@gmail.com>")
         .about(concat!(
             "\nFilter vg deconstruct output using variant nesting information.\n",
@@ -95,6 +95,7 @@ fn main() {
                 .long("input")
                 .value_name("FILE")
                 .help("Filter this input VCF file.")
+                .required(true)
                 .takes_value(true),
         )
         .arg(
