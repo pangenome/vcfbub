@@ -80,6 +80,10 @@ fn get_max_allele_length(vcf_record: &VCFRecord) -> usize {
     alt_lengths.iter().max().unwrap().clone()
 }
 
+fn get_ref_allele_length(vcf_record: &VCFRecord) -> usize {
+    vcf_record.reference.len()
+}
+
 fn main() {
     let matches = App::new("vcfbub")
         .version("0.1.0")
@@ -107,12 +111,27 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("max-length")
-                .short("b")
-                .long("max-length")
+            Arg::with_name("max-allele-length")
+                .short("a")
+                .long("max-allele-length")
                 .value_name("LENGTH")
-                .help("Filter sites whose longest allele is greater than LENGTH.")
+                .help("Filter sites whose max allele length is greater than LENGTH.")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("max-ref-length")
+                .short("r")
+                .long("max-ref-length")
+                .value_name("LENGTH")
+                .help("Filter sites whose reference allele is longer than LENGTH.")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("debug")
+                .short("d")
+                .long("debug")
+                .help("Print debugging information about which sites are removed.")
+                .takes_value(false),
         )
         .get_matches();
 
@@ -123,10 +142,17 @@ fn main() {
         None => i32::MAX,
     };
 
-    let max_length = match matches.value_of("max-length") {
+    let max_allele_length = match matches.value_of("max-allele-length") {
         Some(l) => l.parse::<usize>().unwrap(),
         None => usize::MAX,
     };
+
+    let max_ref_length = match matches.value_of("max-ref-length") {
+        Some(l) => l.parse::<usize>().unwrap(),
+        None => usize::MAX,
+    };
+
+    let print_debug = matches.is_present("debug");
 
     let vcf_header = get_header(infile);
 
@@ -137,18 +163,24 @@ fn main() {
     let mut popped_bubbles: HashSet<String> = HashSet::new();
     for_each_line_in_vcf(infile, |vcf_record, _| {
         let level = get_level(vcf_record);
-        let max_allele_length = get_max_allele_length(vcf_record);
+        let max_length = get_max_allele_length(vcf_record);
+        let ref_length = get_ref_allele_length(vcf_record);
+        let mut keep = true;
         if level > max_level {
-            keep_record.push(false);
-        } else {
-            keep_record.push(true);
+            keep = false;
         }
-        if max_allele_length > max_length {
+        if max_length > max_allele_length || ref_length > max_ref_length {
+            if print_debug {
+                eprintln!(
+                    "popped {} {}",
+                    get_snarl_id(vcf_record),
+                    vcf_record.position
+                );
+            }
             popped_bubbles.insert(get_snarl_id(vcf_record));
+            keep = false;
         }
-        //let snarl_id = get_snarl_id(vcf_record);
-        //let parent_snarl = get_parent_snarl(vcf_record);
-        //parent_bubble.insert(snarl_id, parent_snarl);
+        keep_record.push(keep);
     });
 
     // setup writer
@@ -158,8 +190,11 @@ fn main() {
     for_each_line_in_vcf(infile, |vcf_record, idx| {
         let snarl_id = get_snarl_id(vcf_record);
         let parent_snarl = get_parent_snarl(vcf_record);
-        if keep_record[idx] && !popped_bubbles.contains(&snarl_id)
-            || !keep_record[idx] && popped_bubbles.contains(&parent_snarl)
+        if keep_record[idx] // we keep records when they're marked to keep
+            // or if they're marked don't-keep but their parent was popped and they weren't popped
+            || (!keep_record[idx]
+                && popped_bubbles.contains(&parent_snarl)
+                && !popped_bubbles.contains(&snarl_id))
         {
             writer.write_record(&vcf_record).unwrap()
         }
