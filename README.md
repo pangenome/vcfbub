@@ -1,5 +1,7 @@
 # vcfbub
 
+[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](https://anaconda.org/bioconda/vcfbub)
+
 popping bubbles in vg deconstruct VCFs
 
 ## overview
