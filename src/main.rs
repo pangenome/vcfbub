@@ -119,11 +119,28 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("min-allele-length")
+                .short("A")
+                .long("min-allele-length")
+                .value_name("LENGTH")
+                .help("Filter sites whose max allele length is less than LENGTH.")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("max-ref-length")
                 .short("r")
                 .long("max-ref-length")
                 .value_name("LENGTH")
                 .help("Filter sites whose reference allele is longer than LENGTH.")
+                .takes_value(true),
+                
+        )
+        .arg(
+            Arg::with_name("min-ref-length")
+                .short("R")
+                .long("min-ref-length")
+                .value_name("LENGTH")
+                .help("Filter sites whose reference allele is less than LENGTH.")
                 .takes_value(true),
         )
         .arg(
@@ -146,8 +163,16 @@ fn main() {
         Some(l) => l.parse::<usize>().unwrap(),
         None => usize::MAX,
     };
+    let min_allele_length = match matches.value_of("min-allele-length") {
+        Some(l) => l.parse::<usize>().unwrap(),
+        None => usize::MAX,
+    };
 
     let max_ref_length = match matches.value_of("max-ref-length") {
+        Some(l) => l.parse::<usize>().unwrap(),
+        None => usize::MAX,
+    };
+    let min_ref_length = match matches.value_of("min-ref-length") {
         Some(l) => l.parse::<usize>().unwrap(),
         None => usize::MAX,
     };
@@ -169,7 +194,8 @@ fn main() {
         if level > max_level {
             keep = false;
         }
-        if max_length > max_allele_length || ref_length > max_ref_length {
+        // if max_length > max_allele_length || ref_length > max_ref_length {
+        if max_length > max_allele_length || max_length < min_allele_length {
             if print_debug {
                 eprintln!(
                     "popped {} {}",
