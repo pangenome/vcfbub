@@ -195,7 +195,7 @@ fn main() {
             keep = false;
         }
         // if max_length > max_allele_length || ref_length > max_ref_length {
-        if max_length > max_allele_length || max_length < min_allele_length {
+        if max_length > max_allele_length || max_length < min_allele_length || ref_length > max_ref_length || ref_length < min_ref_length {
             if print_debug {
                 eprintln!(
                     "popped {} {}",
