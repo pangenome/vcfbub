@@ -1,65 +1,57 @@
 use clap::{App, Arg};
-use flate2::read::MultiGzDecoder;
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
 //use std::String;
 //use fnv::{FnvHashMap, FnvHashSet};
 use std::collections::HashSet;
-use vcf::*;
+use rust_htslib::bcf::{Reader, Writer, Read, Record, Header, Format};
 
-fn get_header(infile: &str) -> vcf::VCFHeader {
-    VCFReader::new(BufReader::new(MultiGzDecoder::new(
-        File::open(infile).unwrap(),
-    )))
-    .unwrap()
-    .header()
-    .clone()
-}
 
-fn for_each_line_in_vcf(infile: &str, mut callback: impl FnMut(&mut VCFRecord, usize)) {
-    let mut reader = VCFReader::new(BufReader::new(MultiGzDecoder::new(
-        File::open(infile).unwrap(),
-    )))
-    .unwrap();
+fn for_each_line_in_vcf(infile: &str, mut callback: impl FnMut(&mut Record, usize)) {
+    let mut reader = Reader::from_path(infile).expect("Error opening VCF");
 
     // verify that we have a file we can operate on
-    if !reader.header().info_list().any(|x| x == b"LV") {
-        panic!("[vcfbub] error: Input VCF must have LV (snarl level) annotations.")
-    }
-    if !reader.header().info_list().any(|x| x == b"PS") {
-        panic!("[vcfbub] error: Input VCF must have PS (parent snarl) annotations.")
-    }
+    //if !reader.header().info_list().any(|x| x == b"LV") {
+    //    panic!("[vcfbub] error: Input VCF must have LV (snarl level) annotations.")
+    //}
+    //if !reader.header().info_list().any(|x| x == b"PS") {
+    //    panic!("[vcfbub] error: Input VCF must have PS (parent snarl) annotations.")
+    // }
 
-    // prepare VCFRecord object
-    let mut vcf_record = VCFRecord::new(reader.header().clone());
-
-    let mut idx = 0;
-
-    while reader.next_record(&mut vcf_record).unwrap() {
-        callback(&mut vcf_record, idx);
-        idx += 1;
+    for (idx, vcf_record) in reader.records().enumerate() {
+        callback(&mut vcf_record.unwrap(), idx);
     }
 }
 
-fn get_level(vcf_record: &VCFRecord) -> i32 {
-    let x = vcf_record.info(b"LV").unwrap().clone();
-    let y = String::from_utf8(x[0].clone()).unwrap();
-    y.parse::<i32>().unwrap()
+fn get_level(vcf_record: &Record) -> i32 {
+    let lv_info = vcf_record.info(b"LV");
+    let lv_opt = lv_info.integer().expect("Could not parse LV");
+    let lv_int = match lv_opt {
+        Some(lv_opt) => {
+            let lv_array = *lv_opt;
+            lv_array[0]
+        },
+        None => 0
+    };
+    lv_int as i32
 }
 
-fn get_snarl_id(vcf_record: &VCFRecord) -> String {
-    String::from_utf8(vcf_record.id[0].clone()).unwrap()
+fn get_snarl_id(vcf_record: &Record) -> String {
+    String::from_utf8(vcf_record.id().clone()).unwrap()
 }
 
-fn get_parent_snarl(vcf_record: &VCFRecord) -> String {
-    match vcf_record.info(b"PS") {
-        Some(y) => String::from_utf8(y[0].clone()).unwrap(),
-        None => "".to_string(),
-    }
+fn get_parent_snarl(vcf_record: &Record) -> String {
+    match vcf_record.info(b"PS").string() {
+        Ok(ps_opt) => {
+            match ps_opt {
+                Some(ps_array) => Some(String::from_utf8_lossy(&*ps_array[0]).to_string()).unwrap(),
+                None => "".to_string(),
+            }
+        },
+        Err(_) => "".to_string(),
+    }    
 }
 
 /*
-fn get_bubble_length(vcf_record: &VCFRecord) -> usize {
+fn get_bubble_length(vcf_record: &Record) -> usize {
     let mut alt_lengths = Vec::new();
     alt_lengths.push(vcf_record.reference.len());
     for alt in vcf_record.alternative.iter() {
@@ -71,17 +63,16 @@ fn get_bubble_length(vcf_record: &VCFRecord) -> usize {
 }
 */
 
-fn get_max_allele_length(vcf_record: &VCFRecord) -> usize {
-    let mut alt_lengths = Vec::new();
-    alt_lengths.push(vcf_record.reference.len());
-    for alt in vcf_record.alternative.iter() {
-        alt_lengths.push(alt.len());
+fn get_max_allele_length(vcf_record: &Record) -> usize {
+    let mut allele_lengths = Vec::new();
+    for allele in vcf_record.alleles().iter() {
+        allele_lengths.push(allele.len());
     }
-    alt_lengths.iter().max().unwrap().clone()
+    allele_lengths.iter().max().unwrap().clone()
 }
 
-fn get_ref_allele_length(vcf_record: &VCFRecord) -> usize {
-    vcf_record.reference.len()
+fn get_ref_allele_length(vcf_record: &Record) -> usize {
+    vcf_record.alleles()[0].len()
 }
 
 fn main() {
@@ -154,8 +145,6 @@ fn main() {
 
     let print_debug = matches.is_present("debug");
 
-    let vcf_header = get_header(infile);
-
     // make a pass to check the levels
     // and decide what to filter
     // recording things by index in the file
@@ -174,7 +163,7 @@ fn main() {
                 eprintln!(
                     "popped {} {}",
                     get_snarl_id(vcf_record),
-                    vcf_record.position
+                    vcf_record.pos()
                 );
             }
             popped_bubbles.insert(get_snarl_id(vcf_record));
@@ -184,9 +173,14 @@ fn main() {
     });
 
     // setup writer
-    let handle = std::io::stdout();
-    let buf = BufWriter::new(handle);
-    let mut writer = VCFWriter::new(buf, &vcf_header).unwrap();
+    let in_vcf = Reader::from_path(infile).expect("Error opening VCF");
+    let in_header = in_vcf.header();
+    let in_samples = in_vcf.header().samples();    
+    let mut out_header = Header::from_template_subset(in_header, &[]).unwrap();
+    for sample in in_samples {
+        out_header.push_sample(sample);
+    }
+    let mut writer = Writer::from_stdout(&out_header, true, Format::Vcf).unwrap();
     for_each_line_in_vcf(infile, |vcf_record, idx| {
         let snarl_id = get_snarl_id(vcf_record);
         let parent_snarl = get_parent_snarl(vcf_record);
@@ -196,7 +190,7 @@ fn main() {
                 && popped_bubbles.contains(&parent_snarl)
                 && !popped_bubbles.contains(&snarl_id))
         {
-            writer.write_record(&vcf_record).unwrap()
+	    writer.write(&vcf_record).unwrap()
         }
     });
 

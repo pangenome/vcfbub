@@ -7,6 +7,6 @@ edition = "2018"
 
 [dependencies]
 
-vcf = "0.6.0"
+rust-htslib = { version = "0.47.0", default-features = false }
 flate2 = "1.0.22"
 clap = "2.33.3"
